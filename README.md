@@ -5,7 +5,7 @@ TypeScript client SDK for the Stravon Management Platform. Storage-only in v1 â€
 ## Install
 
 ```bash
-npm install git+https://github.com/Dev-Njagi-James/stravon-management-S.C.A.L.E-SDK.git
+npm install @stravon/scale-sdk
 ```
 
 ## Requirements
@@ -15,7 +15,7 @@ Node 18+ (uses built-in `fetch` â€” no `axios`, `node-fetch`, or any added HTTP 
 ## Quickstart
 
 ```ts
-import { ScaleClient } from "stravon-scale-sdk";
+import { ScaleClient } from "@stravon/scale-sdk";
 
 const scale = new ScaleClient({ apiKey: "YOUR_API_KEY" });
 

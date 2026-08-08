@@ -1,5 +1,5 @@
 {
-  "name": "stravon-scale-sdk",
+  "name": "@stravon/scale-sdk",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -15,6 +15,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "tsup": "^8.5.1",
     "typescript": "^5.6.3"
