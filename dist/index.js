@@ -93,7 +93,7 @@ var StorageNamespace = class {
   }
   /** GET /storage/files?key= — fetch file metadata. */
   async read(params) {
-    const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`);
+    const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, void 0, 2e4);
     return await response.json();
   }
   /** PATCH /storage/files?key= — in-place replace of file metadata. */
@@ -117,7 +117,10 @@ var StorageNamespace = class {
     const created = await this.create({ filename: params.filename, contentType: params.contentType });
     const putResponse = await fetch(created.uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": params.contentType },
+      headers: {
+        "Content-Type": params.contentType,
+        "Cache-Control": "public, max-age=31536000, immutable"
+      },
       body: params.body
     });
     if (!putResponse.ok) {
@@ -143,24 +146,26 @@ var ScaleClient = class {
   /** Version prefix prepended to every request path. Callers never pass it. */
   versionPrefix = "/v1";
   /** Client-side fetch timeout in milliseconds. Enforced by the fetch wrapper. */
-  defaultTimeoutMs = 1e4;
+  defaultTimeoutMs;
   /** Storage namespace, wired to this client's bound request function. */
   storage;
   constructor(config) {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl ?? "https://stravon-management.onrender.com";
+    this.defaultTimeoutMs = config.timeoutMs ?? 65e3;
     this.storage = new StorageNamespace(this.request.bind(this));
   }
   /**
    * Base fetch wrapper. Prepends version prefix and base URL, injects the API key
    * header, enforces the timeout, and maps status codes to typed errors.
    */
-  async request(path, init) {
+  async request(path, init, timeoutMs) {
     const url = `${this.baseUrl}${this.versionPrefix}${path}`;
     const headers = new Headers(init?.headers);
     headers.set("x-api-key", this.apiKey);
+    const timeout = timeoutMs ?? this.defaultTimeoutMs;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.defaultTimeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
     try {
       const response = await fetch(url, {
         ...init,
@@ -183,7 +188,7 @@ var ScaleClient = class {
       return response;
     } catch (err) {
       if (controller.signal.aborted) {
-        throw new TimeoutError(`Request timed out after ${this.defaultTimeoutMs}ms`);
+        throw new TimeoutError(`Request timed out after ${timeout}ms`);
       }
       throw err;
     } finally {

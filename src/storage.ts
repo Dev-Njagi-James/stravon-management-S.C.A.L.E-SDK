@@ -1,5 +1,5 @@
 /** Function used to make authenticated backend requests. Injected by ScaleClient. */
-export type RequestFn = (path: string, init?: RequestInit) => Promise<Response>;
+export type RequestFn = (path: string, init?: RequestInit, timeoutMs?: number) => Promise<Response>;
 
 /** Storage namespace exposing the five storage methods plus the upload() convenience. */
 export class StorageNamespace {
@@ -32,7 +32,7 @@ export class StorageNamespace {
 
   /** GET /storage/files?key= — fetch file metadata. */
   async read(params: { key: string }) {
-    const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`);
+    const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, undefined, 20000);
     return (await response.json()) as { downloadUrl: string; publicUrl: string; key: string; filename: string };
   }
 

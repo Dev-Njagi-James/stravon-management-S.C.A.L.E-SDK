@@ -15,14 +15,15 @@ export class ScaleClient {
   private readonly versionPrefix = "/v1";
 
   /** Client-side fetch timeout in milliseconds. Enforced by the fetch wrapper. */
-  private readonly defaultTimeoutMs = 10000;
+  private readonly defaultTimeoutMs: number;
 
   /** Storage namespace, wired to this client's bound request function. */
   public readonly storage: StorageNamespace;
 
-  constructor(config: { apiKey: string; baseUrl?: string }) {
+  constructor(config: { apiKey: string; baseUrl?: string; timeoutMs?: number }) {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl ?? "https://stravon-management.onrender.com";
+    this.defaultTimeoutMs = config.timeoutMs ?? 65000;
     this.storage = new StorageNamespace(this.request.bind(this));
   }
 
@@ -30,14 +31,15 @@ export class ScaleClient {
    * Base fetch wrapper. Prepends version prefix and base URL, injects the API key
    * header, enforces the timeout, and maps status codes to typed errors.
    */
-  private async request(path: string, init?: RequestInit): Promise<Response> {
+  private async request(path: string, init?: RequestInit, timeoutMs?: number): Promise<Response> {
     const url = `${this.baseUrl}${this.versionPrefix}${path}`;
 
     const headers = new Headers(init?.headers);
     headers.set("x-api-key", this.apiKey);
 
+    const timeout = timeoutMs ?? this.defaultTimeoutMs;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.defaultTimeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
       const response = await fetch(url, {
@@ -66,7 +68,7 @@ export class ScaleClient {
       return response;
     } catch (err) {
       if (controller.signal.aborted) {
-        throw new TimeoutError(`Request timed out after ${this.defaultTimeoutMs}ms`);
+        throw new TimeoutError(`Request timed out after ${timeout}ms`);
       }
       throw err;
     } finally {

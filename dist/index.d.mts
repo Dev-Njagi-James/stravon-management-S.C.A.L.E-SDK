@@ -1,5 +1,5 @@
 /** Function used to make authenticated backend requests. Injected by ScaleClient. */
-type RequestFn = (path: string, init?: RequestInit) => Promise<Response>;
+type RequestFn = (path: string, init?: RequestInit, timeoutMs?: number) => Promise<Response>;
 /** Storage namespace exposing the five storage methods plus the upload() convenience. */
 declare class StorageNamespace {
     /** Injected request function (ScaleClient's request(), bound). Prefixes /v1 itself. */
@@ -83,6 +83,7 @@ declare class ScaleClient {
     constructor(config: {
         apiKey: string;
         baseUrl?: string;
+        timeoutMs?: number;
     });
     /**
      * Base fetch wrapper. Prepends version prefix and base URL, injects the API key
