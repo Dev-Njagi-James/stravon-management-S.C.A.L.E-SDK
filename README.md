@@ -143,3 +143,9 @@ The SDK enforces a fixed 10-second timeout on every backend request. This timeou
 ## Versioning
 
 This SDK is versioned independently of the backend via git tags (semver). Install by tag, e.g. `npm install ...#v1.0.0`.
+
+## Changelog
+
+### v1.0.1
+
+- **Fixed:** `upload()` now sends `Cache-Control` header on the underlying PUT so CDN caching works correctly. No change to method signatures.

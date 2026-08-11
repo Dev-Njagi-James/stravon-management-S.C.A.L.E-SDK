@@ -60,7 +60,10 @@ export class StorageNamespace {
 
     const putResponse = await fetch(created.uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": params.contentType },
+      headers: {
+        "Content-Type": params.contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
       body: params.body,
     });
 
