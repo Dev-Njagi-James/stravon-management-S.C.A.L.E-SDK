@@ -36,6 +36,22 @@ export class StorageNamespace {
     return (await response.json()) as { downloadUrl: string; publicUrl: string; key: string; filename: string };
   }
 
+  /** POST /storage/files/batch-read — fetch metadata for up to 50 keys in one call. */
+  async batchRead(params: { keys: string[] }) {
+    const response = await this.requestFn("/storage/files/batch-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    return (await response.json()) as {
+      results: Array<
+        | { key: string; downloadUrl: string; publicUrl: string; filename: string }
+        | { key: string; error: string }
+      >;
+      retryAfterMs?: number;
+    };
+  }
+
   /** PATCH /storage/files?key= — in-place replace of file metadata. */
   async modify(params: { key: string; contentType: string; fileSize?: number }) {
     const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, {
