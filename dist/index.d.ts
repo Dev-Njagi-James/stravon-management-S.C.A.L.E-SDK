@@ -33,6 +33,21 @@ declare class StorageNamespace {
         key: string;
         filename: string;
     }>;
+    /** POST /storage/files/batch-read — fetch metadata for up to 50 keys in one call. */
+    batchRead(params: {
+        keys: string[];
+    }): Promise<{
+        results: Array<{
+            key: string;
+            downloadUrl: string;
+            publicUrl: string;
+            filename: string;
+        } | {
+            key: string;
+            error: string;
+        }>;
+        retryAfterMs?: number;
+    }>;
     /** PATCH /storage/files?key= — in-place replace of file metadata. */
     modify(params: {
         key: string;

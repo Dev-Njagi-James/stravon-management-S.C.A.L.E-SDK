@@ -64,6 +64,15 @@ var StorageNamespace = class {
     const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, void 0, 2e4);
     return await response.json();
   }
+  /** POST /storage/files/batch-read — fetch metadata for up to 50 keys in one call. */
+  async batchRead(params) {
+    const response = await this.requestFn("/storage/files/batch-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params)
+    });
+    return await response.json();
+  }
   /** PATCH /storage/files?key= — in-place replace of file metadata. */
   async modify(params) {
     const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, {

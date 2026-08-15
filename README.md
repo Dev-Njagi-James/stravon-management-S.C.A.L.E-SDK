@@ -116,6 +116,32 @@ Orchestrates: `create()` → direct PUT to the returned `uploadUrl` → `complet
 
 ---
 
+### `storage.batchRead(params)`
+
+Maps to `POST /v1/storage/files/batch-read`.
+
+**Input:**
+```ts
+{ keys: string[] }
+```
+
+**Output:**
+```ts
+{
+  results: Array<
+    { key: string; downloadUrl: string; publicUrl: string; filename: string }
+    | { key: string; error: string }
+  >;
+  retryAfterMs?: number;
+}
+```
+
+**Behavior:**
+- Max 50 keys per call. Excess keys result in a 400 error before any tokens are consumed.
+- Partial failure is supported: individual keys that don't exist, belong to another project, or exceed rate limits come back as `{ key, error }` entries inside `results` — the call does **not** throw for these. Possible per-key `error` values: `"not_found"`, `"cross_project"`, `"rate_limit_exceeded"`.
+- If **zero** keys in the batch could be served (batch fully throttled), a `RateLimitError` is thrown — same as other methods, carrying `retryAfterMs`.
+- The order of `results` matches the order of input `keys`.
+
 ## Error Handling
 
 All six error classes are exported from the package root.
@@ -127,7 +153,7 @@ All six error classes are exported from the package root.
 | `RateLimitError` | Backend returns 429. Carries a `retryAfterMs: number` property matching the backend body `{ error: "rate_limit_exceeded", retryAfterMs }`. |
 | `ValidationError` | Backend returns a 400-class response (bad input, missing required field, etc.). |
 | `ServerError` | Backend returns a 5xx response. |
-| `TimeoutError` | Client-side request exceeds the 10-second timeout. |
+| `TimeoutError` | Client-side request exceeds the configured timeout (see Configuration below). |
 
 > **No retry logic** exists anywhere in the SDK. The caller decides whether and how to retry.
 
@@ -137,8 +163,7 @@ All six error classes are exported from the package root.
 |---|---|---|---|
 | `apiKey` | `string` | (required) | Your project's API key. |
 | `baseUrl` | `string` | `https://stravon-management.onrender.com` | Backend base URL. Change only when targeting a dev/staging deployment. |
-
-The SDK enforces a fixed 10-second timeout on every backend request. This timeout is not currently configurable.
+| `timeoutMs` | `number` | `65000` | Client-side request timeout in milliseconds, applied to every backend request unless overridden per-call internally (e.g. `read()` uses a 20000ms timeout). Configurable via the constructor: `new ScaleClient({ apiKey, baseUrl, timeoutMs })`. |
 
 ## Versioning
 
@@ -149,3 +174,11 @@ This SDK is versioned independently of the backend via git tags (semver). Instal
 ### v1.0.1
 
 - **Fixed:** `upload()` now sends `Cache-Control` header on the underlying PUT so CDN caching works correctly. No change to method signatures.
+
+### v1.0.2
+
+- **Changed:** Default client-side request timeout raised from 10000ms to 65000ms, and made configurable via the `timeoutMs` constructor option. `read()` now uses a shorter 20000ms timeout internally.
+
+### v1.1.0
+
+- **Added:** `storage.batchRead(params)` — fetch metadata for up to 50 keys in one call.
