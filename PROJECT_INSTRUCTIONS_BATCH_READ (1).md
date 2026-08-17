@@ -99,3 +99,6 @@ One `call_logs` row per batch call, not one per key. `action: 'read'`, `bytes: n
 - Zero-token batch confirmed to return 429 (not 200-with-all-errors), per the locked decision above.
 - `call_logs` row confirmed populated with `storage_keys` array, `storage_key` null, for a real batch call — checked against raw Supabase export. `status` values (`success`/`throttled`/`error`) confirmed correct across a served batch, a partially-throttled batch, and a fully-throttled batch.
 - Tier-scaled burst/refill confirmed for at least two tiers via live burst test (same pattern as Phase 4's entry-tier-only burst test — do not let this ship with only one tier exercised, unlike the current open item on Phase 4's starter/growth/scale gap).
+
+## Exit Criteria
+- All exit creteria have been met
