@@ -165,7 +165,7 @@ Orchestrates: `create()` → direct PUT to the returned `uploadUrl` → `complet
 { key: string; uuid: string; filename: string; verified: boolean; bytes: number; usage: UsageSnapshot }
 ```
 
-`fileSize` is derived automatically from `string`, `Blob`/`File`, `ArrayBuffer`, and typed-array/`Buffer` bodies. For streams or `FormData` the size cannot be determined, so pass `fileSize` explicitly or a `ValidationError` is thrown before any request is made. `usage` is the state at reservation time, before this file's bytes were verified.P
+`fileSize` is derived automatically from `string`, `Blob`/`File`, `ArrayBuffer`, and typed-array/`Buffer` bodies. For streams or `FormData` the size cannot be determined, so pass `fileSize` explicitly or a `ValidationError` is thrown before any request is made. `usage` is the state at reservation time, before this file's bytes were verified.
 
 > **Note:** The intermediate PUT step goes directly to the storage provider (R2/Cloudflare), not through the backend. If that PUT fails, the SDK throws a plain `Error` — not one of the typed error classes below — because the failure came from the storage infrastructure, not the backend API.
 
