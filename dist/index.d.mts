@@ -1,22 +1,43 @@
 /** Function used to make authenticated backend requests. Injected by ScaleClient. */
 type RequestFn = (path: string, init?: RequestInit, timeoutMs?: number) => Promise<Response>;
-/** Storage namespace exposing the five storage methods plus the upload() convenience. */
+type UsageLevel = "ok" | "warn80" | "upgrade90" | "overage";
+/** Usage state returned alongside create() and modify(). */
+interface UsageSnapshot {
+    usedBytes: number;
+    quotaBytes: number;
+    ceilingBytes: number;
+    percent: number;
+    level: UsageLevel;
+    overageBytes: number;
+}
+/** Response of GET /v1/storage/usage. */
+interface StorageUsageReport extends UsageSnapshot {
+    tier: string;
+    billingInterval: "monthly" | "annual";
+    subscriptionStatus: "active" | "expired";
+    currentPeriodEnd: string | null;
+    fileCount: number;
+    maxFileBytes: number;
+}
+interface PresignedUpload {
+    uploadUrl: string;
+    publicUrl: string;
+    key: string;
+    uuid: string;
+    filename: string;
+    usage: UsageSnapshot;
+}
+/** Storage namespace exposing the storage methods, usage(), and the upload() convenience. */
 declare class StorageNamespace {
     /** Injected request function (ScaleClient's request(), bound). Prefixes /v1 itself. */
     private readonly requestFn;
     constructor(requestFn: RequestFn);
-    /** POST /storage/files — create a new storage file. */
+    /** POST /storage/files — create a new storage file. fileSize (bytes) is required. */
     create(params: {
         filename: string;
         contentType: string;
-        fileSize?: number;
-    }): Promise<{
-        uploadUrl: string;
-        publicUrl: string;
-        key: string;
-        uuid: string;
-        filename: string;
-    }>;
+        fileSize: number;
+    }): Promise<PresignedUpload>;
     /** POST /storage/files/complete — mark an upload complete. */
     complete(params: {
         key: string;
@@ -48,18 +69,12 @@ declare class StorageNamespace {
         }>;
         retryAfterMs?: number;
     }>;
-    /** PATCH /storage/files?key= — in-place replace of file metadata. */
+    /** PATCH /storage/files?key= — in-place replace. fileSize (bytes) of the new file is required. */
     modify(params: {
         key: string;
         contentType: string;
-        fileSize?: number;
-    }): Promise<{
-        uploadUrl: string;
-        publicUrl: string;
-        key: string;
-        uuid: string;
-        filename: string;
-    }>;
+        fileSize: number;
+    }): Promise<PresignedUpload>;
     /** DELETE /storage/files?key= — delete a storage file. */
     delete(params: {
         key: string;
@@ -67,17 +82,25 @@ declare class StorageNamespace {
         success: boolean;
         key: string;
     }>;
-    /** Upload convenience: create -> PUT to uploadUrl -> complete. No retry on PUT. */
+    /** GET /storage/usage — this project's storage usage against its tier quota. */
+    usage(): Promise<StorageUsageReport>;
+    /**
+     * Upload convenience: create -> PUT to uploadUrl -> complete. No retry on PUT.
+     * fileSize is derived from the body (string, Blob/File, ArrayBuffer, typed array/Buffer).
+     * For streams or FormData, pass fileSize explicitly.
+     */
     upload(params: {
         filename: string;
         contentType: string;
         body: BodyInit;
+        fileSize?: number;
     }): Promise<{
         key: string;
         uuid: string;
         filename: string;
         verified: boolean;
         bytes: number;
+        usage: UsageSnapshot;
     }>;
 }
 
@@ -158,5 +181,19 @@ declare class ServerError extends ScaleError {
 declare class TimeoutError extends ScaleError {
     constructor(message: string);
 }
+/**
+ * Thrown on 403 storage_ceiling_exceeded. Carries the limit and current usage in bytes.
+ */
+declare class QuotaExceededError extends ScaleError {
+    readonly limitBytes?: number;
+    readonly usedBytes?: number;
+    constructor(message: string, limitBytes?: number, usedBytes?: number);
+}
+/**
+ * Thrown on 403 subscription_expired. Create and modify are blocked; read, usage and delete still work.
+ */
+declare class SubscriptionExpiredError extends ScaleError {
+    constructor(message: string);
+}
 
-export { AuthError, RateLimitError, ScaleClient, ScaleError, ServerError, TimeoutError, ValidationError };
+export { AuthError, type PresignedUpload, QuotaExceededError, RateLimitError, ScaleClient, ScaleError, ServerError, type StorageUsageReport, SubscriptionExpiredError, TimeoutError, type UsageLevel, type UsageSnapshot, ValidationError };

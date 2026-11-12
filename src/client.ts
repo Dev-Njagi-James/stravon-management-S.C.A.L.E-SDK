@@ -1,4 +1,12 @@
-import { AuthError, RateLimitError, ValidationError, ServerError, TimeoutError } from "./errors";
+import {
+  AuthError,
+  RateLimitError,
+  ValidationError,
+  ServerError,
+  TimeoutError,
+  QuotaExceededError,
+  SubscriptionExpiredError,
+} from "./errors";
 import { StorageNamespace } from "./storage";
 
 /**
@@ -20,7 +28,11 @@ export class ScaleClient {
   /** Storage namespace, wired to this client's bound request function. */
   public readonly storage: StorageNamespace;
 
-  constructor(config: { apiKey: string; baseUrl?: string; timeoutMs?: number }) {
+  constructor(config: {
+    apiKey: string;
+    baseUrl?: string;
+    timeoutMs?: number;
+  }) {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl ?? "https://stravon-management.onrender.com";
     this.defaultTimeoutMs = config.timeoutMs ?? 65000;
@@ -31,7 +43,11 @@ export class ScaleClient {
    * Base fetch wrapper. Prepends version prefix and base URL, injects the API key
    * header, enforces the timeout, and maps status codes to typed errors.
    */
-  private async request(path: string, init?: RequestInit, timeoutMs?: number): Promise<Response> {
+  private async request(
+    path: string,
+    init?: RequestInit,
+    timeoutMs?: number,
+  ): Promise<Response> {
     const url = `${this.baseUrl}${this.versionPrefix}${path}`;
 
     const headers = new Headers(init?.headers);
@@ -56,6 +72,20 @@ export class ScaleClient {
         const { message, retryAfterMs } = await this.readErrorBody(response);
         throw new RateLimitError(message, retryAfterMs);
       }
+      if (response.status === 403) {
+        const body = await this.readErrorBody(response);
+        if (body.code === "storage_ceiling_exceeded") {
+          throw new QuotaExceededError(
+            body.message,
+            body.limitBytes,
+            body.usedBytes,
+          );
+        }
+        if (body.code === "subscription_expired") {
+          throw new SubscriptionExpiredError(body.message);
+        }
+        throw new ValidationError(body.message);
+      }
 
       if (response.status >= 400 && response.status <= 499) {
         throw new ValidationError((await this.readErrorBody(response)).message);
@@ -76,19 +106,32 @@ export class ScaleClient {
     }
   }
 
-  private async readErrorBody(response: Response): Promise<{ message: string; retryAfterMs: number }> {
+  private async readErrorBody(response: Response): Promise<{
+    message: string;
+    code?: string;
+    retryAfterMs: number;
+    limitBytes?: number;
+    usedBytes?: number;
+  }> {
     let message = response.statusText;
+    let code: string | undefined;
     let retryAfterMs = 0;
+    let limitBytes: number | undefined;
+    let usedBytes: number | undefined;
 
     try {
       const data = await response.json();
-      if (typeof data?.error === "string") message = data.error;
-      else if (typeof data?.message === "string") message = data.message;
-      if (typeof data?.retryAfterMs === "number") retryAfterMs = data.retryAfterMs;
+      if (typeof data?.error === "string") code = data.error;
+      if (typeof data?.message === "string") message = data.message;
+      else if (code) message = code;
+      if (typeof data?.retryAfterMs === "number")
+        retryAfterMs = data.retryAfterMs;
+      if (typeof data?.limitBytes === "number") limitBytes = data.limitBytes;
+      if (typeof data?.usedBytes === "number") usedBytes = data.usedBytes;
     } catch {
       // Body not JSON — keep statusText as the message.
     }
 
-    return { message, retryAfterMs };
+    return { message, code, retryAfterMs, limitBytes, usedBytes };
   }
 }

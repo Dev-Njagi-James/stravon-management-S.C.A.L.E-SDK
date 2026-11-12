@@ -21,10 +21,12 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   AuthError: () => AuthError,
+  QuotaExceededError: () => QuotaExceededError,
   RateLimitError: () => RateLimitError,
   ScaleClient: () => ScaleClient,
   ScaleError: () => ScaleError,
   ServerError: () => ServerError,
+  SubscriptionExpiredError: () => SubscriptionExpiredError,
   TimeoutError: () => TimeoutError,
   ValidationError: () => ValidationError
 });
@@ -65,15 +67,37 @@ var TimeoutError = class extends ScaleError {
     super(message);
   }
 };
+var QuotaExceededError = class extends ScaleError {
+  limitBytes;
+  usedBytes;
+  constructor(message, limitBytes, usedBytes) {
+    super(message);
+    this.limitBytes = limitBytes;
+    this.usedBytes = usedBytes;
+  }
+};
+var SubscriptionExpiredError = class extends ScaleError {
+  constructor(message) {
+    super(message);
+  }
+};
 
 // src/storage.ts
+function resolveBodySize(body) {
+  if (typeof body === "string")
+    return new TextEncoder().encode(body).byteLength;
+  if (body instanceof Blob) return body.size;
+  if (body instanceof ArrayBuffer) return body.byteLength;
+  if (ArrayBuffer.isView(body)) return body.byteLength;
+  return void 0;
+}
 var StorageNamespace = class {
   /** Injected request function (ScaleClient's request(), bound). Prefixes /v1 itself. */
   requestFn;
   constructor(requestFn) {
     this.requestFn = requestFn;
   }
-  /** POST /storage/files — create a new storage file. */
+  /** POST /storage/files — create a new storage file. fileSize (bytes) is required. */
   async create(params) {
     const response = await this.requestFn("/storage/files", {
       method: "POST",
@@ -93,7 +117,11 @@ var StorageNamespace = class {
   }
   /** GET /storage/files?key= — fetch file metadata. */
   async read(params) {
-    const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, void 0, 2e4);
+    const response = await this.requestFn(
+      `/storage/files?key=${encodeURIComponent(params.key)}`,
+      void 0,
+      2e4
+    );
     return await response.json();
   }
   /** POST /storage/files/batch-read — fetch metadata for up to 50 keys in one call. */
@@ -105,25 +133,53 @@ var StorageNamespace = class {
     });
     return await response.json();
   }
-  /** PATCH /storage/files?key= — in-place replace of file metadata. */
+  /** PATCH /storage/files?key= — in-place replace. fileSize (bytes) of the new file is required. */
   async modify(params) {
-    const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contentType: params.contentType, fileSize: params.fileSize })
-    });
+    const response = await this.requestFn(
+      `/storage/files?key=${encodeURIComponent(params.key)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentType: params.contentType,
+          fileSize: params.fileSize
+        })
+      }
+    );
     return await response.json();
   }
   /** DELETE /storage/files?key= — delete a storage file. */
   async delete(params) {
-    const response = await this.requestFn(`/storage/files?key=${encodeURIComponent(params.key)}`, {
-      method: "DELETE"
-    });
+    const response = await this.requestFn(
+      `/storage/files?key=${encodeURIComponent(params.key)}`,
+      {
+        method: "DELETE"
+      }
+    );
     return await response.json();
   }
-  /** Upload convenience: create -> PUT to uploadUrl -> complete. No retry on PUT. */
+  /** GET /storage/usage — this project's storage usage against its tier quota. */
+  async usage() {
+    const response = await this.requestFn("/storage/usage");
+    return await response.json();
+  }
+  /**
+   * Upload convenience: create -> PUT to uploadUrl -> complete. No retry on PUT.
+   * fileSize is derived from the body (string, Blob/File, ArrayBuffer, typed array/Buffer).
+   * For streams or FormData, pass fileSize explicitly.
+   */
   async upload(params) {
-    const created = await this.create({ filename: params.filename, contentType: params.contentType });
+    const fileSize = params.fileSize ?? resolveBodySize(params.body);
+    if (fileSize === void 0 || !Number.isInteger(fileSize) || fileSize <= 0) {
+      throw new ValidationError(
+        "fileSize could not be determined from body; pass fileSize explicitly"
+      );
+    }
+    const created = await this.create({
+      filename: params.filename,
+      contentType: params.contentType,
+      fileSize
+    });
     const putResponse = await fetch(created.uploadUrl, {
       method: "PUT",
       headers: {
@@ -133,7 +189,9 @@ var StorageNamespace = class {
       body: params.body
     });
     if (!putResponse.ok) {
-      throw new Error(`Upload to storage failed with status ${putResponse.status}`);
+      throw new Error(
+        `Upload to storage failed with status ${putResponse.status}`
+      );
     }
     const completed = await this.complete({ key: created.key });
     return {
@@ -141,7 +199,8 @@ var StorageNamespace = class {
       uuid: created.uuid,
       filename: created.filename,
       verified: completed.verified,
-      bytes: completed.bytes
+      bytes: completed.bytes,
+      usage: created.usage
     };
   }
 };
@@ -188,6 +247,20 @@ var ScaleClient = class {
         const { message, retryAfterMs } = await this.readErrorBody(response);
         throw new RateLimitError(message, retryAfterMs);
       }
+      if (response.status === 403) {
+        const body = await this.readErrorBody(response);
+        if (body.code === "storage_ceiling_exceeded") {
+          throw new QuotaExceededError(
+            body.message,
+            body.limitBytes,
+            body.usedBytes
+          );
+        }
+        if (body.code === "subscription_expired") {
+          throw new SubscriptionExpiredError(body.message);
+        }
+        throw new ValidationError(body.message);
+      }
       if (response.status >= 400 && response.status <= 499) {
         throw new ValidationError((await this.readErrorBody(response)).message);
       }
@@ -206,24 +279,33 @@ var ScaleClient = class {
   }
   async readErrorBody(response) {
     let message = response.statusText;
+    let code;
     let retryAfterMs = 0;
+    let limitBytes;
+    let usedBytes;
     try {
       const data = await response.json();
-      if (typeof data?.error === "string") message = data.error;
-      else if (typeof data?.message === "string") message = data.message;
-      if (typeof data?.retryAfterMs === "number") retryAfterMs = data.retryAfterMs;
+      if (typeof data?.error === "string") code = data.error;
+      if (typeof data?.message === "string") message = data.message;
+      else if (code) message = code;
+      if (typeof data?.retryAfterMs === "number")
+        retryAfterMs = data.retryAfterMs;
+      if (typeof data?.limitBytes === "number") limitBytes = data.limitBytes;
+      if (typeof data?.usedBytes === "number") usedBytes = data.usedBytes;
     } catch {
     }
-    return { message, retryAfterMs };
+    return { message, code, retryAfterMs, limitBytes, usedBytes };
   }
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AuthError,
+  QuotaExceededError,
   RateLimitError,
   ScaleClient,
   ScaleError,
   ServerError,
+  SubscriptionExpiredError,
   TimeoutError,
   ValidationError
 });

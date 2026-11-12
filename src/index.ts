@@ -6,4 +6,12 @@ export {
   ValidationError,
   ServerError,
   TimeoutError,
+  QuotaExceededError,
+  SubscriptionExpiredError,
 } from "./errors";
+export type {
+  UsageLevel,
+  UsageSnapshot,
+  StorageUsageReport,
+  PresignedUpload,
+} from "./storage";

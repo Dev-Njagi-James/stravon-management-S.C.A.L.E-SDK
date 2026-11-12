@@ -70,3 +70,27 @@ export class TimeoutError extends ScaleError {
     super(message);
   }
 }
+
+
+/**
+ * Thrown on 403 storage_ceiling_exceeded. Carries the limit and current usage in bytes.
+ */
+export class QuotaExceededError extends ScaleError {
+  public readonly limitBytes?: number;
+  public readonly usedBytes?: number;
+
+  constructor(message: string, limitBytes?: number, usedBytes?: number) {
+    super(message);
+    this.limitBytes = limitBytes;
+    this.usedBytes = usedBytes;
+  }
+}
+
+/**
+ * Thrown on 403 subscription_expired. Create and modify are blocked; read, usage and delete still work.
+ */
+export class SubscriptionExpiredError extends ScaleError {
+  constructor(message: string) {
+    super(message);
+  }
+}
