@@ -225,6 +225,198 @@ All eight error classes are exported from the package root.
 | `baseUrl` | `string` | `https://stravon-management.onrender.com` | Backend base URL. Change only when targeting a dev/staging deployment. |
 | `timeoutMs` | `number` | `65000` | Client-side request timeout in milliseconds, applied to every backend request unless overridden per-call internally (e.g. `read()` uses a 20000ms timeout). Configurable via the constructor: `new ScaleClient({ apiKey, baseUrl, timeoutMs })`. |
 
+## Usage widget
+
+A framework-agnostic web-component-style widget that renders a project's storage usage as a donut chart plus a detail table. It mounts into any element and manages its own polling, refresh, and teardown.
+
+### Install path
+
+```bash
+npm install @stravon/scale-sdk
+```
+
+The widget is a separate entry point: import it from `@stravon/scale-sdk/widget`, not the package root.
+
+```ts
+import { mountUsageWidget } from "@stravon/scale-sdk/widget";
+```
+
+### `fetchUsage` contract
+
+`mountUsageWidget(target, options)` requires a `fetchUsage` function that resolves to a `StorageUsageReport` (the same type returned by `client.storage.usage()`):
+
+```ts
+interface UsageWidgetOptions {
+  fetchUsage: () => Promise<StorageUsageReport>;
+  refreshMs?: number;          // poll interval; 0 disables, 1-4999 raised to 5000; default 60000
+  brand?: UsageWidgetBrand;    // optional color/font/radius overrides (see Branding)
+  title?: string;
+  onUpgrade?: () => void;      // fires for upgrade90 / overage / expired states
+  onError?: (err: unknown) => void;
+}
+
+interface UsageWidgetBrand {
+  accent?: string;    // ring and header icon; default #002147
+  action?: string;    // Upgrade/Renew button background; default #d4af37
+  actionInk?: string; // Upgrade/Renew button text; default #111111
+  ink?: string;       // text color; default #002147
+  surface?: string;   // card background; default #f6f4eb
+  font?: string;      // CSS font-family; default Inter, system-ui, …
+  radius?: string;    // card corner radius; default 20px
+}
+
+interface UsageWidgetHandle {
+  refresh(): Promise<void>;    // force a reload
+  destroy(): void;             // remove host + stop polling
+}
+```
+
+The widget renders `usedBytes`, `quotaBytes`, `ceilingBytes`, `percent`/`level`, `overageBytes`, `tier`, `billingInterval`, `subscriptionStatus`, `currentPeriodEnd`, `fileCount`, and `maxFileBytes`. `formatBytes` uses decimal units (1 GB = 1,000,000,000 B). See the field mapping table below.
+
+### Server-route pattern (recommended)
+
+`fetchUsage` should call your own backend route, which calls the SDK server-side with the project's API key. The widget never sees the raw key.
+
+```ts
+// Server route (e.g. GET /api/storage-usage)
+import { ScaleClient } from "@stravon/scale-sdk";
+const client = new ScaleClient({ apiKey: process.env.STRAVON_API_KEY! });
+// return await client.storage.usage();
+```
+
+```ts
+// Client
+import { mountUsageWidget } from "@stravon/scale-sdk/widget";
+
+const w = mountUsageWidget("#usage", {
+  fetchUsage: () => fetch("/api/storage-usage").then((r) => r.json()),
+  onUpgrade: () => (location.href = "/billing"),
+});
+// w.destroy() on unmount
+```
+
+`usageFromClient(client)` is a server-side helper that adapts a `ScaleClient` to the `fetchUsage` shape: `fetchUsage: usageFromClient(client)`.
+
+> **Warning — API key in the browser:** Do NOT construct a `ScaleClient` with a raw API key in browser/client code and pass it as `fetchUsage`. Any key shipped to the browser is public and can be extracted. Route through your own backend (above) and keep `STRAVON_API_KEY` server-side only.
+
+React / SPA cleanup:
+
+```tsx
+useEffect(() => {
+  const w = mountUsageWidget(ref.current!, { fetchUsage });
+  return () => w.destroy();
+}, []);
+```
+
+### How the widget loads data
+
+The widget never talks to Stravon directly. It calls `fetchUsage()`, which must resolve to a `StorageUsageReport`. Your backend route is what calls the SDK with the API key.
+
+```
+mountUsageWidget -> fetchUsage() -> integrator backend route -> client.storage.usage() -> GET /v1/storage/usage -> StorageUsageReport -> widget re-renders
+```
+
+- **Load:** `fetchUsage()` is called once immediately on mount. Until it resolves, the card shows "Loading usage".
+- **Update:** a successful fetch replaces the previous report in full and the card re-renders. Call `widget.refresh()` to reload on demand.
+- **Error:** if the first fetch fails, the card shows the error and a Retry button. If a later refresh fails, the last good data stays visible with a "Refresh failed" banner.
+- **Polling:** with `refreshMs` (default `60000` ms) the widget refetches on that interval; `refreshMs: 0` disables polling; values `1`–`4999` are raised to `5000`. Polls are skipped while the document is hidden, and a `visibilitychange` back to visible refetches only if the data is older than `refreshMs`. An error carrying `retryAfterMs` pushes the next poll out to at least that delay.
+
+Server route:
+
+```ts
+import { ScaleClient } from "@stravon/scale-sdk";
+const client = new ScaleClient({ apiKey: process.env.STRAVON_API_KEY! });
+// GET /api/storage-usage
+return Response.json(await client.storage.usage());
+```
+
+Client:
+
+```ts
+import { mountUsageWidget } from "@stravon/scale-sdk/widget";
+const widget = mountUsageWidget("#usage", {
+  fetchUsage: () => fetch("/api/storage-usage").then((r) => r.json()),
+});
+```
+
+After uploads / mutations:
+
+```ts
+await client.storage.upload(...); // or modify(...) / delete(...)
+await widget.refresh();
+```
+
+Call `await widget.refresh()` after every upload, modify, or delete. The usage snapshot returned by `upload()` lacks `fileCount` and `maxFileBytes`, so it cannot render the full card on its own — refetch via `refresh()` to get a complete `StorageUsageReport`.
+
+> **Do not ship the API key to the browser.** Never construct a `ScaleClient` with a real API key in client-side code, and never pass such a client as `fetchUsage`. Keep `STRAVON_API_KEY` server-side and let the browser call only your own route.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetchUsage` | `() => Promise<StorageUsageReport>` | (required) | Resolves usage data. Point at your backend route, not the SDK directly. |
+| `refreshMs` | `number` | `60000` | Poll interval in ms. `0` disables polling; `1`–`4999` raised to `5000`. |
+| `brand` | `UsageWidgetBrand` | Stravon defaults | Optional color / font / radius overrides (see Branding). |
+| `title` | `string` | `"Storage"` | Heading text. |
+| `onUpgrade` | `() => void` | — | Called when the primary button (Upgrade/Renew plan) is clicked; shown only for `upgrade90`, `overage`, or expired. |
+| `onError` | `(err: unknown) => void` | — | Called when a refresh fails. Last good data stays visible. |
+
+### Behavior
+
+- Polls on `refreshMs`; skips a scheduled poll while the document is hidden and refreshes on `visibilitychange` if stale.
+- `refresh()` coalesces concurrent calls (no overlapping requests).
+- On refresh failure the last successfully loaded data remains rendered with an error banner; a manual Retry / Refresh button is available.
+- `destroy()` removes the host element, clears the poll timer, and unregisters the visibility listener.
+
+### Branding
+
+The widget is locked to the Stravon brand by default (navy `#002147`, gold `#d4af37`, cream `#f6f4eb`, Inter). `brand` is an optional override: it sets CSS custom properties on the host element that the widget's internal styles read. Omit any field to keep the Stravon default.
+
+| `brand` field | CSS variable set | Default | Affects |
+| --- | --- | --- | --- |
+| `accent` | `--scale-accent` | `#002147` | Ring, header icon, focus outline |
+| `action` | `--scale-action` | `#d4af37` | Upgrade/Renew button background (and its border) |
+| `actionInk` | `--scale-action-ink` | `#111111` | Upgrade/Renew button text color |
+| `ink` | `--scale-ink` | `#002147` | Text color |
+| `surface` | `--scale-surface` | `#f6f4eb` | Card background |
+| `font` | `--scale-font` | `Inter, system-ui, …` | Card font-family |
+| `radius` | `--scale-radius` | `20px` | Card corner radius |
+
+Minimal usage — the defaults already match Stravon:
+
+```ts
+const widget = mountUsageWidget("#usage", { fetchUsage });
+```
+
+The host app must load the Inter font; otherwise the widget falls back to `system-ui`.
+
+Because these are standard CSS custom properties on the host, you can also set them directly on the mount target instead of via `brand`:
+
+```css
+#usage { --scale-accent: #0f8a6d; --scale-ink: #10161f; --scale-radius: 12px; }
+```
+
+### Field mapping
+
+Where each `StorageUsageReport` field appears in the rendered widget:
+
+| Field | Widget location | Notes |
+| --- | --- | --- |
+| `tier` | Header subtitle | Rendered as `"<Tier> plan · <Billing>"` (e.g. `Growth plan · Annual`). |
+| `billingInterval` | Header subtitle | Capitalized, after `plan ·`. |
+| `subscriptionStatus` | Status pill | `"Active"` / `"Expired"`; expired adds the `bad` pill style. |
+| `usedBytes` | Donut + "used of quota" line | Drives ring fraction and center percentage. |
+| `quotaBytes` | Donut + "used of quota" line | Denominator for the ring; `percent = round(used/quota*100)`. |
+| `percent` | (not displayed) | The widget computes its own percentage from `usedBytes`/`quotaBytes`. |
+| `level` | Ring color + note banner | `ok`/`warn80`/`upgrade90`/`overage` set ring color; `warn80`/`upgrade90` add a note. |
+| `overageBytes` | "Over quota by …" line + overage banner | Shown only when `> 0`. |
+| `ceilingBytes` | Footer "Hard cap …" | Compact units. |
+| `currentPeriodEnd` | Stats "Period ends" | Formatted date, or "Not set" when null/invalid. |
+| `fileCount` | Stats "Files" | Integer. |
+| `maxFileBytes` | Stats "Max file size" | Compact units (number + unit). |
+
+Byte values use decimal units (1 GB = 1,000,000,000 B): values below 100 in a unit show one decimal (e.g. `1.0 KB`), values ≥ 100 show an integer (e.g. `100 MB`); compact fields (footer hard cap, max file size) strip a trailing `.0` (`1 KB`).
+
 ## Versioning
 
 This SDK is versioned independently of the backend via git tags (semver). Install by tag, e.g. `npm install ...#v1.2.0`
