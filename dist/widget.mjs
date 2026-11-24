@@ -10,51 +10,96 @@ var LEVELS = {
   overage: { color: "var(--over)", note: null }
 };
 var QUOTA_HELP = "Quota is the storage your plan includes. Usage above the quota is overage. Uploads are rejected at the hard cap.";
+var SIZE_STEPS = { tablet: 400, desktop: 560 };
+var SIZE_HYST = 8;
+function sizeFor(width, current) {
+  const t = SIZE_STEPS.tablet;
+  const d = SIZE_STEPS.desktop;
+  if (current === "desktop") {
+    if (width >= d - SIZE_HYST) return "desktop";
+    return width >= t + SIZE_HYST ? "tablet" : "phone";
+  }
+  if (current === "tablet") {
+    if (width >= d + SIZE_HYST) return "desktop";
+    if (width < t - SIZE_HYST) return "phone";
+    return "tablet";
+  }
+  if (width >= d + SIZE_HYST) return "desktop";
+  if (width >= t + SIZE_HYST) return "tablet";
+  return "phone";
+}
 var CSS = `
-:host{all:initial;display:block;font:inherit;font-family:var(--scale-font,Inter,system-ui,-apple-system,"Segoe UI",sans-serif);color:var(--ink);
+:host{all:initial;display:block;width:100%;min-width:0;font:inherit;font-family:var(--scale-font,Inter,system-ui,-apple-system,"Segoe UI",sans-serif);color:var(--ink);
 --accent:var(--scale-accent,#002147);--action:var(--scale-action,#d4af37);--action-ink:var(--scale-action-ink,#111111);
 --ink:var(--scale-ink,#002147);--surface:var(--scale-surface,#f6f4eb);
 --muted:#5f6b7a;--track:#e3dfd0;--line:#e6e2d5;--note:#ece8da;
---pillbg:#dff3e3;--pillfg:#1a7f37;--warn:#b7791f;--hot:#c2410c;--over:#b91c1c;--shadow:0 8px 30px rgba(0,33,71,.08)}
+--pillbg:#dff3e3;--pillfg:#1a7f37;--warn:#b7791f;--hot:#c2410c;--over:#b91c1c;--shadow:0 8px 30px rgba(0,33,71,.08);
+--pad-y:12px;--pad-x:14px;--gap-head:8px;--gap-section:10px;--stat-pad:12px;--foot-pad:8px}
 *{box-sizing:border-box}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--scale-radius,20px);padding:24px;max-width:520px;width:100%;box-shadow:var(--shadow)}
-.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--scale-radius,20px);padding:var(--pad-y) var(--pad-x);max-width:720px;width:100%;box-shadow:var(--shadow)}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--gap-head)}
 .id{display:flex;align-items:flex-start;gap:14px;min-width:0}
 .ico{width:28px;height:28px;flex:none;color:var(--accent);margin-top:2px}
-.title{margin:0;font-size:1.3em;font-weight:600;line-height:1.2}
-.subtitle{margin:4px 0 0;color:var(--muted)}
-.pill{flex:none;padding:5px 16px;border-radius:999px;background:var(--pillbg);color:var(--pillfg);font-weight:500}
+.title{margin:0;font-size:.9em;font-weight:600;line-height:1.2}
+.subtitle{margin:4px 0 0;color:var(--muted);font-size:.75em}
+.pill{flex:none;padding:5px 16px;border-radius:999px;background:var(--pillbg);color:var(--pillfg);font-weight:500;font-size:.8em}
 .pill.bad{background:var(--note);color:var(--over)}
-.main{display:flex;flex-direction:column;align-items:center;text-align:center;margin-top:8px}
-.donut{width:180px;height:180px}
+.body{display:flex;flex-direction:column;gap:var(--gap-section);margin-top:var(--gap-head)}
+.gauge{display:flex;flex-direction:column;align-items:center}
+.arch{display:block;width:130px;height:auto}
 .ring{transition:stroke-dasharray .5s ease}
 @media(prefers-reduced-motion:reduce){.ring{transition:none}}
-.pct{font-size:24px;font-weight:700;fill:var(--ink);text-anchor:middle}
-.sub{font-size:8.5px;fill:var(--muted);text-anchor:middle}
-.used{margin:6px 0 0;display:flex;align-items:center;gap:8px;color:var(--muted)}
+.pct{font-size:20px;font-weight:700;fill:var(--ink);text-anchor:middle}
+.sub{font-size:9px;fill:var(--muted);text-anchor:middle}
+.usage{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:6px}
+.used{margin:0;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.8em}
 .used b{color:var(--ink);font-weight:600}
-.remaining{margin:4px 0 0;color:var(--muted)}
+.remaining{margin:0;color:var(--muted);font-size:.8em}
+.remaining::before{content:" \xB7 "}
 .remaining.bad{color:var(--over);font-weight:600}
 .help{position:relative;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:1.5px solid var(--muted);border-radius:50%;font-size:11px;line-height:1;cursor:help;color:var(--muted)}
 .help:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tipbox{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:240px;padding:8px 10px;border-radius:8px;background:var(--ink);color:var(--surface);font-size:12px;line-height:1.4;text-align:left;z-index:1}
 .help:hover .tipbox,.help:focus .tipbox{display:block}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:20px;padding-top:20px;border-top:1px solid var(--line)}
-.stat{padding:0 16px;min-width:0}
-.stat:first-child{padding-left:0}
-.stat+.stat{border-left:1px solid var(--line)}
-.sv{font-size:1.45em;font-weight:600;line-height:1.2;white-space:nowrap}
+.stats{display:grid;grid-template-columns:1fr;gap:0}
+.stat{padding:0;min-width:0}
+.stat+.stat{border-top:1px solid var(--line);padding-top:6px}
+.sv{font-size:1.15em;font-weight:600;line-height:1.2;white-space:nowrap;min-width:0}
 .sv small{font-size:.65em;font-weight:500;margin-left:2px}
-.sl{color:var(--muted);margin-top:2px}
-.statSub{font-size:.8em;color:var(--muted);font-family:inherit;margin-top:2px}
-.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;color:var(--muted)}
+.sl{color:var(--muted);margin-top:2px;font-size:.75em}
+.statSub{font-size:.7em;color:var(--muted);font-family:inherit;margin-top:2px}
+.nowrap{white-space:nowrap}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:var(--gap-section);padding-top:var(--foot-pad);border-top:1px solid var(--line);color:var(--muted);font-size:.8em}
 button{font:inherit;cursor:pointer;border-radius:8px;padding:4px 10px;border:1px solid var(--line);background:transparent;color:var(--ink)}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button:disabled{opacity:.5;cursor:default}
-button.primary{background:var(--action);color:var(--action-ink);border-color:var(--action);margin-top:14px;padding:8px 14px;font-weight:600}
-.banner{margin-top:14px;padding:9px 11px;border-radius:8px;background:var(--note);border-left:3px solid var(--banner,var(--muted))}
-.state{padding:32px 0;text-align:center;color:var(--muted)}
+button.primary{background:var(--action);color:var(--action-ink);border-color:var(--action);margin-top:8px;padding:6px 12px;font-weight:600}
+.banner{margin-top:8px;padding:6px 10px;border-radius:8px;background:var(--note);border-left:3px solid var(--banner,var(--muted))}
+.state{padding:16px 0;text-align:center;color:var(--muted)}
 .state.err{color:var(--over)}
+.card[data-size="tablet"] .body{flex-direction:row;align-items:center;gap:14px}
+.card[data-size="tablet"] .gauge{flex:none}
+.card[data-size="tablet"] .arch{width:120px}
+.card[data-size="tablet"] .usage{display:block;margin-top:0}
+.card[data-size="tablet"] .used{margin:6px 0 0}
+.card[data-size="tablet"] .remaining{margin:4px 0 0}
+.card[data-size="tablet"] .remaining::before{content:none}
+.card[data-size="tablet"] .stats{grid-template-columns:repeat(2,1fr);gap:8px 0}
+.card[data-size="tablet"] .stat{padding:0;border-top:0;padding-top:0}
+.card[data-size="tablet"] .stat:nth-child(1){padding-right:10px}
+.card[data-size="tablet"] .stat:nth-child(2){padding-left:10px;border-left:1px solid var(--line)}
+.card[data-size="tablet"] .stat:nth-child(3){grid-column:1/-1;border-top:1px solid var(--line);padding-top:6px;border-left:0;padding-left:0}
+.card[data-size="desktop"] .body{gap:20px}
+.card[data-size="desktop"] .arch{width:150px}
+.card[data-size="desktop"] .usage{display:block;margin-top:0}
+.card[data-size="desktop"] .used{margin:6px 0 0}
+.card[data-size="desktop"] .remaining{margin:4px 0 0}
+.card[data-size="desktop"] .remaining::before{content:none}
+.card[data-size="desktop"] .stats{grid-template-columns:repeat(3,1fr);gap:0}
+.card[data-size="desktop"] .stat{padding:0 var(--stat-pad);border-top:0;padding-top:0}
+.card[data-size="desktop"] .stat:nth-child(1){padding-left:0}
+.card[data-size="desktop"] .stat:nth-child(2),.card[data-size="desktop"] .stat:nth-child(3){border-left:1px solid var(--line)}
+.card[data-size="desktop"] .stat:nth-child(3){grid-column:auto}
 `;
 function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
@@ -119,9 +164,26 @@ function mountUsageWidget(target, opts) {
   if (b?.radius) host.style.setProperty("--scale-radius", b.radius);
   const root = host.attachShadow({ mode: "open" });
   root.append(h("style", {}, CSS));
-  const card = h("section", { class: "card", "aria-label": opts.title ?? "Storage usage" });
+  const card = h("section", { class: "card", "data-size": "phone", "aria-label": opts.title ?? "Storage usage" });
   root.append(card);
   parent.append(host);
+  let size = "phone";
+  const applySize = (width) => {
+    const next = sizeFor(width, size);
+    if (next === size) return;
+    size = next;
+    card.setAttribute("data-size", next);
+  };
+  applySize(card.getBoundingClientRect().width);
+  let sizeObserver = null;
+  if (typeof ResizeObserver !== "undefined") {
+    sizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const width = entry?.borderBoxSize?.[0]?.inlineSize ?? card.getBoundingClientRect().width;
+      applySize(width);
+    });
+    sizeObserver.observe(card);
+  }
   const base = opts.refreshMs ?? 6e4;
   const pollMs = base > 0 ? Math.max(5e3, base) : 0;
   let data = null;
@@ -206,36 +268,34 @@ function mountUsageWidget(target, opts) {
       h("span", { class: expired ? "pill bad" : "pill" }, cap(d.subscriptionStatus))
     );
     const R = 50;
-    const SW = 10;
-    const C = 2 * Math.PI * R;
-    const dash = frac >= 1 ? C : Math.max(frac * C - SW, 0.01);
+    const SW = 9;
+    const L = Math.PI * R;
+    const dash = frac >= 1 ? L : Math.max(frac * L - SW, 0.01);
+    const arc = "M10 60 A50 50 0 0 1 110 60";
     const svg = s("svg", {
-      viewBox: "0 0 120 120",
-      class: "donut",
+      viewBox: "0 0 120 68",
+      class: "arch",
       role: "img",
       "aria-label": `${pct}% of storage used. ${formatBytes(remaining)} remaining of ${formatBytes(quota)}.`
     });
-    svg.append(s("circle", { cx: 60, cy: 60, r: R, fill: "none", stroke: "var(--track)", "stroke-width": SW }));
+    svg.append(s("path", { d: arc, fill: "none", stroke: "var(--track)", "stroke-width": SW, "stroke-linecap": "round" }));
     if (frac > 0) {
       svg.append(
-        s("circle", {
+        s("path", {
           class: "ring",
-          cx: 60,
-          cy: 60,
-          r: R,
+          d: arc,
           fill: "none",
           stroke: ringColor,
           "stroke-width": SW,
           "stroke-linecap": frac >= 1 ? "butt" : "round",
-          "stroke-dasharray": `${dash.toFixed(2)} ${C.toFixed(2)}`,
-          transform: "rotate(90 60 60)"
+          "stroke-dasharray": `${dash.toFixed(2)} ${L.toFixed(2)}`
         })
       );
     }
-    svg.append(s("text", { class: "pct", x: 60, y: 63 }, `${pct}%`), s("text", { class: "sub", x: 60, y: 77 }, "used"));
+    svg.append(s("text", { class: "pct", x: 60, y: 48 }, `${pct}%`), s("text", { class: "sub", x: 60, y: 60 }, "used"));
     const help = h("span", { class: "help", tabindex: "0", role: "button", "aria-label": QUOTA_HELP }, "?", h("span", { class: "tipbox", role: "tooltip" }, QUOTA_HELP));
-    const usedLine = h("p", { class: "used" }, h("span", {}, h("b", {}, formatBytes(used)), ` used of ${formatBytes(quota)} quota`), help);
-    const remLine = d.overageBytes > 0 ? h("p", { class: "remaining bad" }, `Over quota by ${formatBytes(d.overageBytes)}`) : h("p", { class: "remaining" }, `${formatBytes(remaining)} remaining`);
+    const usedLine = h("p", { class: "used" }, h("span", {}, h("b", {}, formatBytes(used)), ` of ${formatBytes(quota)}`), help);
+    const remLine = d.overageBytes > 0 ? h("p", { class: "remaining bad" }, `Over quota by ${formatBytes(d.overageBytes)}`) : h("p", { class: "remaining" }, `${formatBytes(remaining)} left`);
     const stat = (value, label) => h("div", { class: "stat" }, h("div", { class: "sv" }, value), h("div", { class: "sl" }, label));
     const [mn, mu] = bytesParts(d.maxFileBytes, true);
     const filesCell = h(
@@ -246,7 +306,11 @@ function mountUsageWidget(target, opts) {
       d.imageCount != null ? h(
         "div",
         { class: "statSub" },
-        `${d.imageCount} images \xB7 ${d.videoCount} videos \xB7 ${d.otherCount} other`
+        h("span", { class: "nowrap" }, `${d.imageCount} images`),
+        " \xB7 ",
+        h("span", { class: "nowrap" }, `${d.videoCount} videos`),
+        " \xB7 ",
+        h("span", { class: "nowrap" }, `${d.otherCount} other`)
       ) : null
     );
     const stats = h(
@@ -257,7 +321,8 @@ function mountUsageWidget(target, opts) {
       stat(formatDate(d.currentPeriodEnd), "Period ends")
     );
     const foot = h("div", { class: "foot" }, h("span", {}, `Hard cap ${formatBytes(d.ceilingBytes, true)}`), refreshButton());
-    const out = [head, h("div", { class: "main" }, svg, usedLine, remLine), stats];
+    const body = h("div", { class: "body" }, h("div", { class: "gauge" }, svg, h("div", { class: "usage" }, usedLine, remLine)), stats);
+    const out = [head, body];
     const notes = [];
     if (expired) notes.push("Subscription expired. New uploads are blocked. Reading and deleting still work.");
     if (d.level === "overage")
@@ -286,6 +351,7 @@ function mountUsageWidget(target, opts) {
     destroy() {
       destroyed = true;
       clearTimeout(timer);
+      sizeObserver?.disconnect();
       document.removeEventListener("visibilitychange", onVisible);
       host.remove();
     }

@@ -227,7 +227,9 @@ All eight error classes are exported from the package root.
 
 ## Usage widget
 
-A framework-agnostic web-component-style widget that renders a project's storage usage as a donut chart plus a detail table. It mounts into any element and manages its own polling, refresh, and teardown.
+A framework-agnostic web-component-style widget that renders a project's storage usage as an arch gauge plus a detail table. It mounts into any element and manages its own polling, refresh, and teardown.
+
+The widget sizes its layout from its own width, so it needs a block-level or width-defined host. In a shrink-to-fit parent (an `inline-block`, or a flex item with `width:auto` inside a parent that has no width) it stays in the compact phone layout.
 
 ### Install path
 
