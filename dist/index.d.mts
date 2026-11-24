@@ -1,5 +1,5 @@
-import { S as StorageNamespace } from './errors-CNOCEp24.mjs';
-export { A as AuthError, P as PresignedUpload, Q as QuotaExceededError, R as RateLimitError, a as ScaleError, b as ServerError, c as StorageUsageReport, d as SubscriptionExpiredError, T as TimeoutError, U as UsageLevel, e as UsageSnapshot, V as ValidationError } from './errors-CNOCEp24.mjs';
+import { S as StorageNamespace } from './errors-DSxiOpqn.mjs';
+export { A as AuthError, P as PresignedUpload, Q as QuotaExceededError, R as RateLimitError, a as ScaleError, b as ServerError, c as StorageUsageReport, d as SubscriptionExpiredError, T as TimeoutError, U as UsageLevel, e as UsageSnapshot, V as ValidationError } from './errors-DSxiOpqn.mjs';
 
 /**
  * Scale Client SDK client.

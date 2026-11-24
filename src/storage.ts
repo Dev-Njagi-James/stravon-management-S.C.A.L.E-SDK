@@ -27,6 +27,9 @@ export interface StorageUsageReport extends UsageSnapshot {
   currentPeriodEnd: string | null;
   fileCount: number;
   maxFileBytes: number;
+  imageCount?: number;
+  videoCount?: number;
+  otherCount?: number;
 }
 
 export interface PresignedUpload {

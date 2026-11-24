@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Usage widget — state gallery</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 24px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 28px;
+        align-items: start;
+      }
+      figure {
+        margin: 0;
+        padding: 12px;
+        border: 1px dashed #ccd;
+        border-radius: 12px;
+      }
+      figcaption {
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      .host {
+        min-height: 60px;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import { mountUsageWidget } from "../dist/widget.mjs";
+
+      // Stravon brand config (same values the widget now ships as defaults).
+      const STRAVON_BRAND = {
+        accent: "#002147",
+        action: "#d4af37",
+        actionInk: "#111111",
+        ink: "#002147",
+        surface: "#f6f4eb",
+        font: "Inter, system-ui, sans-serif",
+        radius: "20px",
+      };
+
+      const base = {
+        billingInterval: "annual",
+        subscriptionStatus: "active",
+        currentPeriodEnd: "2026-12-01T00:00:00.000Z",
+        tier: "growth",
+        fileCount: 148,
+        maxFileBytes: 250_000_000,
+        ceilingBytes: 12_000_000_000,
+        quotaBytes: 10_000_000_000,
+        percent: 0,
+        level: "ok",
+        overageBytes: 0,
+        usedBytes: 0,
+      };
+
+      const report = (over) => ({ ...base, ...over });
+
+      const states = {
+        ok: () =>
+          report({ usedBytes: 6_800_000_000, percent: 68, level: "ok" }),
+        warn80: () =>
+          report({ usedBytes: 8_200_000_000, percent: 82, level: "warn80" }),
+        upgrade90: () =>
+          report({ usedBytes: 9_300_000_000, percent: 93, level: "upgrade90" }),
+        overage: () =>
+          report({
+            usedBytes: 11_200_000_000,
+            percent: 112,
+            level: "overage",
+            overageBytes: 1_200_000_000,
+          }),
+        expired: () =>
+          report({
+            usedBytes: 6_800_000_000,
+            percent: 68,
+            level: "ok",
+            subscriptionStatus: "expired",
+          }),
+        loading: () => new Promise(() => {}),
+        error: () => Promise.reject(new Error("Network error")),
+      };
+
+      const order = [
+        "ok",
+        "warn80",
+        "upgrade90",
+        "overage",
+        "expired",
+        "loading",
+        "error",
+      ];
+
+      for (const state of order) {
+        for (const variant of ["default", "brand"]) {
+          const figure = document.createElement("figure");
+          const caption = document.createElement("figcaption");
+          caption.textContent = `${state} — ${variant}`;
+          const host = document.createElement("div");
+          host.className = "host";
+          host.id = `${state}-${variant}`;
+          figure.append(caption, host);
+          document.body.append(figure);
+
+          const opts = {
+            fetchUsage: states[state],
+            onUpgrade:
+              state === "upgrade90" || state === "expired"
+                ? () => {}
+                : undefined,
+          };
+          if (variant === "brand") opts.brand = STRAVON_BRAND;
+          mountUsageWidget(host, opts);
+        }
+      }
+    </script>
+  </body>
+</html>

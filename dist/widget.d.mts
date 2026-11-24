@@ -1,4 +1,4 @@
-import { c as StorageUsageReport } from './errors-CNOCEp24.mjs';
+import { c as StorageUsageReport } from './errors-DSxiOpqn.mjs';
 
 interface UsageWidgetBrand {
     /** Ring and icon. Default Stravon navy #002147. */

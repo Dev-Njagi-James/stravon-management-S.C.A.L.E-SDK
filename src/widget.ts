@@ -88,6 +88,7 @@ const CSS = `
 .sv{font-size:1.45em;font-weight:600;line-height:1.2;white-space:nowrap}
 .sv small{font-size:.65em;font-weight:500;margin-left:2px}
 .sl{color:var(--muted);margin-top:2px}
+.statSub{font-size:.8em;color:var(--muted);font-family:inherit;margin-top:2px}
 .foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;color:var(--muted)}
 button{font:inherit;cursor:pointer;border-radius:8px;padding:4px 10px;border:1px solid var(--line);background:transparent;color:var(--ink)}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -318,10 +319,23 @@ export function mountUsageWidget(
     const stat = (value: Node | string, label: string): HTMLElement =>
       h("div", { class: "stat" }, h("div", { class: "sv" }, value), h("div", { class: "sl" }, label));
     const [mn, mu] = bytesParts(d.maxFileBytes, true);
+    const filesCell = h(
+      "div",
+      { class: "stat" },
+      h("div", { class: "sv" }, String(d.fileCount)),
+      h("div", { class: "sl" }, "Files"),
+      d.imageCount != null
+        ? h(
+            "div",
+            { class: "statSub" },
+            `${d.imageCount} images · ${d.videoCount} videos · ${d.otherCount} other`,
+          )
+        : null,
+    );
     const stats = h(
       "div",
       { class: "stats" },
-      stat(String(d.fileCount), "Files"),
+      filesCell,
       stat(h("span", {}, mn, h("small", {}, ` ${mu}`)), "Max file size"),
       stat(formatDate(d.currentPeriodEnd), "Period ends"),
     );
